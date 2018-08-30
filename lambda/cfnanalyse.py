@@ -104,7 +104,12 @@ class CfnAnalyse(object):
             elif validator == "notExists":
                 return False
             elif validator == "cidrMatch" and rule == "rfc1918": # TODO: not doing IPv6
-                return ((ipaddr.IPNetwork('192.168.0.0/16').overlaps(ipaddr.IPNetwork(value)) and ipaddr.IPNetwork(value).prefixlen >= 16) or (ipaddr.IPNetwork('172.16.0.0/12').overlaps(ipaddr.IPNetwork(value)) and ipaddr.IPNetwork(value).prefixlen >= 12) or (ipaddr.IPNetwork('10.0.0.0/8').overlaps(ipaddr.IPNetwork(value)) and ipaddr.IPNetwork(value).prefixlen >= 8))
+                return ((ipaddr.IPNetwork('192.168.0.0/16').overlaps(ipaddr.IPNetwork(value))
+                    and ipaddr.IPNetwork(value).prefixlen >= 16) 
+                    or (ipaddr.IPNetwork('172.16.0.0/12').overlaps(ipaddr.IPNetwork(value))
+                        and ipaddr.IPNetwork(value).prefixlen >= 12) 
+                    or (ipaddr.IPNetwork('10.0.0.0/8').overlaps(ipaddr.IPNetwork(value)) 
+                        and ipaddr.IPNetwork(value).prefixlen >= 8))
             elif validator == "bool":
                 if (bool(rule)):
                     return value in [True, "true", "True", "TRUE", 1]
@@ -216,12 +221,14 @@ class CfnAnalyse(object):
 
     def resolvePropertyValue(self, prop, expected_type, accept_map = False):
         if isinstance(prop, dict):
-            if 'Ref' in prop:
-                if prop['Ref'] in self.parameters.keys():
+            if 'Ref' in prop: #This appears to only work when the Ref target is defined above the Ref
+                if prop['Ref'] in self.parameters.keys(): #check params for ref targets
+                    #pprint("Matched {} in Params".format(prop['Ref']))
                     return self.parameters[self.resolvePropertyValue(prop['Ref'], expected_type)]
                 else:
-                    pprint('Unable to process property reduce - no ref: ')
+                    pprint('Unable to process property reduce - Ref isn\'t in params: ')
                     pprint(prop)
+                    pprint(self.parameters.keys())
             elif 'Fn::Base64' in prop:
                 result = self.resolvePropertyValue(prop['Fn::Base64'], expected_type)
                 try: #this blows up on a dict sometimes
@@ -341,7 +348,7 @@ class CfnAnalyse(object):
                 if 'Default' in parameter:
                     self.parameters[name] = parameter['Default']
                 else:
-                    self.parameters[name] = "<i>Value for the parameter " + name + "</i>" # TODO: replace placeholder
+                    self.parameters[name] = "<i>No default for the parameter " + name + "</i>" # TODO: replace placeholder
 
         processedAFullResource = True
         cfnresources = self.cfn_template['Resources']
