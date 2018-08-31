@@ -1,13 +1,12 @@
-import json
-import sys
-from pprint import pprint
-import ruamel.yaml
-import ipaddr
-import traceback
 import base64
-import requests
-import time
+import json
 import os
+import traceback
+from pprint import pprint
+
+import ipaddr
+import ruamel.yaml
+
 
 # TODO: Check for transforms
 
@@ -19,19 +18,20 @@ class CfnAnalyse(object):
 
         def funcparse(loader, node):
             node.value = {
-                ruamel.yaml.constructor.ScalarNode:   loader.construct_scalar,
+                ruamel.yaml.constructor.ScalarNode: loader.construct_scalar,
                 ruamel.yaml.constructor.SequenceNode: loader.construct_sequence,
-                ruamel.yaml.constructor.MappingNode:  loader.construct_mapping,
+                ruamel.yaml.constructor.MappingNode: loader.construct_mapping,
             }[type(node)](node)
             node.tag = node.tag.replace(u'!Ref', 'Ref').replace(u'!', u'Fn::').replace(u'Fn::Fn::', u'Fn::')
-            return dict([ (node.tag, node.value) ])
+            return dict([(node.tag, node.value)])
 
-        funcnames = [ 'Ref', 'Base64', 'FindInMap', 'GetAtt', 'GetAZs', 'ImportValue', 'Join', 'Select', 'Split', 'Sub', 'And', 'Equals', 'If', 'Not', 'Or' ]
+        funcnames = ['Ref', 'Base64', 'FindInMap', 'GetAtt', 'GetAZs', 'ImportValue', 'Join', 'Select', 'Split', 'Sub',
+                     'And', 'Equals', 'If', 'Not', 'Or']
 
         for func in funcnames:
             ruamel.yaml.SafeLoader.add_constructor(u'!' + func, funcparse)
 
-        self.cfn_template = ruamel.yaml.safe_load(cfn_template.replace("\t","    ")) # Does JSON too!
+        self.cfn_template = ruamel.yaml.safe_load(cfn_template.replace("\t", "    "))  # Does JSON too!
 
         # Init all the things
         with open("rules.yml", 'r') as file:
@@ -45,7 +45,7 @@ class CfnAnalyse(object):
             raise Exception("[FAIL] Not a valid template")
 
         print(str(len(self.cfn_template['Resources'])) + " resources")
-    
+
     def resetProperties(self):
         self.parameters = {
             'AWS::AccountId': '123456789012',
@@ -63,10 +63,11 @@ class CfnAnalyse(object):
         self.attributes = {}
         self.mappings = {}
         self.rule_evaluations = []
-    
+
     def loadSpecification(self, version):
         available_versions = os.listdir('specifications/')
-        available_versions.sort(key=lambda s: list(map(int, s.split('.')[:-1]))) # order lexically, [:-1] for the .json bit
+        available_versions.sort(
+            key=lambda s: list(map(int, s.split('.')[:-1])))  # order lexically, [:-1] for the .json bit
 
         if version == 'latest':
             self.version = available_versions[-1]
@@ -74,12 +75,12 @@ class CfnAnalyse(object):
             index = available_versions.index(self.version)
             if index < 1:
                 return False
-            self.version = available_versions[index-1]
-        
+            self.version = available_versions[index - 1]
+
         with open("specifications/" + self.version, "r") as file:
             self.specification = json.loads(file.read())
         print("Loaded version: " + self.version)
-        
+
         return True
 
     def validateRule(self, validator, rule, prop):
@@ -103,15 +104,15 @@ class CfnAnalyse(object):
                 return True
             elif validator == "notExists":
                 return False
-            elif validator == "cidrMatch" and rule == "rfc1918": # TODO: not doing IPv6
+            elif validator == "cidrMatch" and rule == "rfc1918":  # TODO: not doing IPv6
                 return ((ipaddr.IPNetwork('192.168.0.0/16').overlaps(ipaddr.IPNetwork(value))
-                    and ipaddr.IPNetwork(value).prefixlen >= 16) 
-                    or (ipaddr.IPNetwork('172.16.0.0/12').overlaps(ipaddr.IPNetwork(value))
-                        and ipaddr.IPNetwork(value).prefixlen >= 12) 
-                    or (ipaddr.IPNetwork('10.0.0.0/8').overlaps(ipaddr.IPNetwork(value)) 
-                        and ipaddr.IPNetwork(value).prefixlen >= 8))
+                         and ipaddr.IPNetwork(value).prefixlen >= 16)
+                        or (ipaddr.IPNetwork('172.16.0.0/12').overlaps(ipaddr.IPNetwork(value))
+                            and ipaddr.IPNetwork(value).prefixlen >= 12)
+                        or (ipaddr.IPNetwork('10.0.0.0/8').overlaps(ipaddr.IPNetwork(value))
+                            and ipaddr.IPNetwork(value).prefixlen >= 8))
             elif validator == "bool":
-                if (bool(rule)):
+                if bool(rule):
                     return value in [True, "true", "True", "TRUE", 1]
                 return value not in [True, "true", "True", "TRUE", 1]
             elif validator == "noImports":
@@ -127,8 +128,8 @@ class CfnAnalyse(object):
 
         if 'Attributes' in resource:
             for attrname, attr in resource['Attributes'].items():
-                pass # TODO: Process resource attributes if necessary
-        
+                pass  # TODO: Process resource attributes if necessary
+
         if 'Properties' in resource:
             for propname, prop in resource['Properties'].items():
                 if resource['Type'] == "AWS::CloudFormation::CustomResource" or resource['Type'].startswith("Custom::"):
@@ -145,11 +146,11 @@ class CfnAnalyse(object):
         print("which is of resource type: " + resource_type)
 
         # TODO Special condition - deprecated functionality
-        #if resource_type == "AWS::ElasticBeanstalk::Application" and propname == "ApplicationVersions":
+        # if resource_type == "AWS::ElasticBeanstalk::Application" and propname == "ApplicationVersions":
         #    return
-        
+
         # TODO Special condition - deprecated functionality
-        #if resource_type == "AWS::ElasticBeanstalk::Application" and propname == "ConfigurationTemplates":
+        # if resource_type == "AWS::ElasticBeanstalk::Application" and propname == "ConfigurationTemplates":
         #    return
 
         spec_types = self.specification['ResourceTypes'].copy()
@@ -164,7 +165,7 @@ class CfnAnalyse(object):
             propdef = spec_types[resource_type]['Properties'][propname]
 
         if 'PrimitiveType' in propdef:
-            if propdef['PrimitiveType'] == "Json": # can JSON have sub refs? YES! Yes it can
+            if propdef['PrimitiveType'] == "Json":  # can JSON have sub refs? YES! Yes it can
                 self.properties.append({
                     'name': resource_type + "." + propname,
                     'type': propdef['PrimitiveType'],
@@ -192,7 +193,7 @@ class CfnAnalyse(object):
                             'type': propdef['PrimitiveItemType'],
                             'value': self.resolvePropertyValue(proplistitem, propdef['PrimitiveItemType'])
                         })
-                else: # Weird case: an item can be defined as a List, but only provide a string, and thats still valid -_-
+                else:  # Weird case: an item can be defined as a List, but only provide a string, and thats still valid -_-
                     self.properties.append({
                         'name': resource_type + "." + propname + "[]",
                         'type': propdef['PrimitiveItemType'],
@@ -202,13 +203,14 @@ class CfnAnalyse(object):
             elif 'ItemType' in propdef:
                 for listitem in prop:
                     if isinstance(listitem, str):
-                        return #TODO: listitem = resolvePropertyValue(prop, "List") --- need to process a reference instead of a list here
+                        return  # TODO: listitem = resolvePropertyValue(prop, "List") --- need to process a reference instead of a list here
                     else:
                         for subpropname, subprop in listitem.items():
-                            if propdef['ItemType'] == "Tag": # TODO: eww
+                            if propdef['ItemType'] == "Tag":  # TODO: eww
                                 self.processProperty(propdef['ItemType'], subpropname, subprop)
                             else:
-                                self.processProperty(resource_type.split(".")[0] + "." + propdef['ItemType'], subpropname, subprop)
+                                self.processProperty(resource_type.split(".")[0] + "." + propdef['ItemType'],
+                                                     subpropname, subprop)
             else:
                 raise Exception('Property has no found ItemType')
         elif (resource_type.split(".")[0] + "." + propdef['Type']) in self.specification['PropertyTypes']:
@@ -219,11 +221,11 @@ class CfnAnalyse(object):
             pprint(propdef)
             raise Exception('Unhandled Property Type')
 
-    def resolvePropertyValue(self, prop, expected_type, accept_map = False):
+    def resolvePropertyValue(self, prop, expected_type, accept_map=False):
         if isinstance(prop, dict):
-            if 'Ref' in prop: #This appears to only work when the Ref target is defined above the Ref
-                if prop['Ref'] in self.parameters.keys(): #check params for ref targets
-                    #pprint("Matched {} in Params".format(prop['Ref']))
+            if 'Ref' in prop:  # This appears to only work when the Ref target is defined above the Ref
+                if prop['Ref'] in self.parameters.keys():  # check params for ref targets
+                    # pprint("Matched {} in Params".format(prop['Ref']))
                     return self.parameters[self.resolvePropertyValue(prop['Ref'], expected_type)]
                 else:
                     pprint('Unable to process property reduce - Ref isn\'t in params: ')
@@ -231,35 +233,48 @@ class CfnAnalyse(object):
                     pprint(self.parameters.keys())
             elif 'Fn::Base64' in prop:
                 result = self.resolvePropertyValue(prop['Fn::Base64'], expected_type)
-                try: #this blows up on a dict sometimes
+                try:  # this blows up on a dict sometimes
                     result = str(base64.b64encode(self.resolvePropertyValue(prop['Fn::Base64'], "String").encode()))
                 except Exception as e:
                     pprint(str(e))
                     pprint('Unable to process Fn::Base64: ')
                     pprint(prop)
                 return result
-            elif 'Fn::FindInMap' in prop:        
-                return self.mappings[self.resolvePropertyValue(prop['Fn::FindInMap'][0], "String")][self.resolvePropertyValue(prop['Fn::FindInMap'][1], "String")][self.resolvePropertyValue(prop['Fn::FindInMap'][2], "String")]
+            elif 'Fn::FindInMap' in prop:
+                return self.mappings[
+                    self.resolvePropertyValue(prop['Fn::FindInMap'][0], "String")][
+                    self.resolvePropertyValue(prop['Fn::FindInMap'][1], "String")][
+                    self.resolvePropertyValue(prop['Fn::FindInMap'][2], "String")]
             elif 'Fn::GetAZs' in prop:
-                return ["us-east-1a", "us-east-1b", "us-east-1c"] # TODO: get from account
+                return ["us-east-1a", "us-east-1b", "us-east-1c"]  # TODO: get from account
             elif 'Fn::Join' in prop:
                 result = str(prop['Fn::Join'][0]) + str(prop['Fn::Join'][1])
-                try:
-                 result = self.resolvePropertyValue(prop['Fn::Join'][0], "String").join(self.resolvePropertyValue(prop['Fn::Join'][1], "List")) # TODO: check
+                try: # this blows up on a dict sometimes
+                    result = self.resolvePropertyValue(prop['Fn::Join'][0], "String").join(
+                        self.resolvePropertyValue(prop['Fn::Join'][1], "List"))  # TODO: check
                 except Exception as e:
                     pprint(str(e))
                     pprint('Unable to process Fn::Join: ')
                     pprint(prop)
                 return result
             elif 'Fn::Split' in prop:
-                return self.resolvePropertyValue(prop['Fn::Split'][1], "List").split(self.resolvePropertyValue(prop['Fn::Split'][0], "String")) # TODO: check
+                result = str(self.resolvePropertyValue(prop['Fn::Split'], "String"))
+                try: # this blows up on a dict sometimes
+                    result = self.resolvePropertyValue(prop['Fn::Split'][1], "List").split(
+                        self.resolvePropertyValue(prop['Fn::Split'][0], "String"))  # TODO: check
+                except Exception as e:
+                    pprint(str(e))
+                    pprint('Unable to process Fn::Split: ')
+                    pprint(prop)
+                return result
             elif 'Fn::Select' in prop:
-                return self.resolvePropertyValue(prop['Fn::Select'][1], "List")[int(str(self.resolvePropertyValue(prop['Fn::Select'][0], "Integer")))] # TODO: check
+                return self.resolvePropertyValue(prop['Fn::Select'][1], "List")[
+                    int(str(self.resolvePropertyValue(prop['Fn::Select'][0], "Integer")))]  # TODO: check
             elif 'Fn::GetAtt' in prop:
-                return '*unknown_getattr*' # TODO: gave up
-                if self.resolvePropertyValue(prop['Fn::GetAtt'][0], "String") in resources['attributes']:
-                    if self.resolvePropertyValue(prop['Fn::GetAtt'][1], "String") in resources[self.resolvePropertyValue(prop['Fn::GetAtt'][0], "String")]['attributes']:
-                        return resources[self.resolvePropertyValue(prop['Fn::GetAtt'][0], "String")]['attributes'][self.resolvePropertyValue(prop['Fn::GetAtt'][1], "String")]
+                return '*unknown_getattr*'  # TODO: gave up
+                # if self.resolvePropertyValue(prop['Fn::GetAtt'][0], "String") in resources['attributes']:
+                #    if self.resolvePropertyValue(prop['Fn::GetAtt'][1], "String") in resources[self.resolvePropertyValue(prop['Fn::GetAtt'][0], "String")]['attributes']:
+                #        return resources[self.resolvePropertyValue(prop['Fn::GetAtt'][0], "String")]['attributes'][self.resolvePropertyValue(prop['Fn::GetAtt'][1], "String")]
             elif 'Fn::If' in prop:
                 if self.resolvePropertyValue(prop['Fn::If'][0], "Boolean") in [True, "true", "True", "TRUE", 1]:
                     return self.resolvePropertyValue(prop['Fn::If'][1], expected_type)
@@ -271,7 +286,8 @@ class CfnAnalyse(object):
                         return False
                 return True
             elif 'Fn::Equals' in prop:
-                return self.resolvePropertyValue(prop['Fn::Equals'][0], expected_type) == self.resolvePropertyValue(prop['Fn::Equals'][1], expected_type)
+                return self.resolvePropertyValue(prop['Fn::Equals'][0], expected_type) == self.resolvePropertyValue(
+                    prop['Fn::Equals'][1], expected_type)
             elif 'Fn::Not' in prop:
                 return self.resolvePropertyValue(prop['Fn::Not'][0], expected_type) == False
             elif 'Fn::Or' in prop:
@@ -294,19 +310,21 @@ class CfnAnalyse(object):
                 resolvable = True
                 max_loops = 20
                 while (index > -1 or not resolvable) and max_loops > 0:
-                    max_loops-=1
+                    max_loops -= 1
                     endindex = src_str.find("}", index)
                     if endindex < 0:
                         print("Left open bracket without right when resolving a Fn::Sub")
                         resolvable = False
-                    varname = src_str[index+2:endindex]
-                    if varname[0] == '!': # Literal
+                    varname = src_str[index + 2:endindex]
+                    if varname[0] == '!':  # Literal
                         index = -1
                         src_str = src_str.replace("${" + varname + "}", varname[1:], 1)
                         break
                     elif varname in sub_var_map:
-                        src_str = src_str.replace("${" + varname + "}", self.resolvePropertyValue(sub_var_map[varname], "String"), 1)
-                        print("Replaced ${" + varname + "} with custom mapping: " + self.resolvePropertyValue(sub_var_map[varname], "String"))
+                        src_str = src_str.replace("${" + varname + "}",
+                                                  self.resolvePropertyValue(sub_var_map[varname], "String"), 1)
+                        print("Replaced ${" + varname + "} with custom mapping: " + self.resolvePropertyValue(
+                            sub_var_map[varname], "String"))
                     elif varname in self.parameters:
                         src_str = src_str.replace("${" + varname + "}", self.parameters[varname], 1)
                         print("Replaced ${" + varname + "} with parameter: " + self.parameters[varname])
@@ -338,7 +356,7 @@ class CfnAnalyse(object):
         pprint('Unable to evaluate property function: ')
         pprint(prop)
 
-    def process_resources(self, iterate_all_versions = True):
+    def process_resources(self, iterate_all_versions=True):
         if 'Mappings' in self.cfn_template:
             self.mappings = self.cfn_template['Mappings']
 
@@ -348,13 +366,14 @@ class CfnAnalyse(object):
                 if 'Default' in parameter:
                     self.parameters[name] = parameter['Default']
                 else:
-                    self.parameters[name] = "<i>No default for the parameter " + name + "</i>" # TODO: replace placeholder
+                    self.parameters[
+                        name] = "<i>No default for the parameter " + name + "</i>"  # TODO: replace placeholder
 
         processedAFullResource = True
         cfnresources = self.cfn_template['Resources']
         while processedAFullResource:
             processedAFullResource = False
-            for name, resource in dict(cfnresources).items(): # dict() to clone for loop
+            for name, resource in dict(cfnresources).items():  # dict() to clone for loop
                 try:
                     self.processResource(resource)
                     self.resources[name] = {
@@ -362,7 +381,7 @@ class CfnAnalyse(object):
                         'attributes': self.attributes,
                         'type': resource['Type']
                     }
-                    self.parameters[name] = '<i>Reference to ' + name + "</i>" # TODO: Make this better
+                    self.parameters[name] = '<i>Reference to ' + name + "</i>"  # TODO: Make this better
                     processedAFullResource = True
                     del cfnresources[name]
                     print("** Processed " + name + " [" + resource['Type'] + "] **")
@@ -380,10 +399,10 @@ class CfnAnalyse(object):
             pprint(cfnresources)
             print("")
             return False
-        
+
         return True
 
-    def evaluate(self): # TODO: This code can be compacted
+    def evaluate(self):  # TODO: This code can be compacted
         print("Begun Evaluating...")
 
         self.rule_evaluations = []
@@ -394,7 +413,7 @@ class CfnAnalyse(object):
                     rule['level'] = "error"
                 if 'rule' not in rule:
                     rule['rule'] = ""
-                if rule['validator'] == "resourceNotExists": # TODO: no pass for this
+                if rule['validator'] == "resourceNotExists":  # TODO: no pass for this
                     if attributes['type'] != rule['resource']:
                         print("[PASS] '" + rule['desc'] + "' matched against '" + resource + "'")
                         self.rule_evaluations.append({
@@ -455,9 +474,11 @@ class CfnAnalyse(object):
                         success = False
                         if attributes['type'] == rule['resource']:
                             for prop in attributes['properties']:
-                                if prop['name'] == (rule['resource'] + ".SecurityGroupIngress.FromPort") and prop['value'] in rule['rule']:
+                                if prop['name'] == (rule['resource'] + ".SecurityGroupIngress.FromPort") and prop[
+                                    'value'] in rule['rule']:
                                     for prop_b in attributes['properties']:
-                                        if prop_b['name'] == (rule['resource'] + ".SecurityGroupIngress.ToPort") and prop_b['value'] == prop['value']:
+                                        if prop_b['name'] == (rule['resource'] + ".SecurityGroupIngress.ToPort") and \
+                                                prop_b['value'] == prop['value']:
                                             print("[PASS] '" + rule['desc'] + "' matched against '" + resource + "'")
                                             success = True
                                             self.rule_evaluations.append({
@@ -483,9 +504,11 @@ class CfnAnalyse(object):
                             })
                     continue
                 for prop in attributes['properties']:
-                    if prop['name'] == (rule['resource'] + "." + rule['property']) or rule['resource'] == "*" or (rule['property'] == "*" and prop['name'].startswith(rule['resource'] + ".")):
+                    if prop['name'] == (rule['resource'] + "." + rule['property']) or rule['resource'] == "*" or (
+                            rule['property'] == "*" and prop['name'].startswith(rule['resource'] + ".")):
                         if self.validateRule(rule['validator'], rule['rule'], prop):
-                            print("[PASS] '" + rule['desc'] + "' matched against '" + resource + " (" + prop['name'] + ")'")
+                            print("[PASS] '" + rule['desc'] + "' matched against '" + resource + " (" + prop[
+                                'name'] + ")'")
                             self.rule_evaluations.append({
                                 'result': 'PASS',
                                 'description': rule['desc'],
@@ -493,7 +516,8 @@ class CfnAnalyse(object):
                                 'property': prop['name']
                             })
                         elif rule['level'] == 'warn':
-                            print("[WARN] '" + rule['desc'] + "' matched against '" + resource + " (" + prop['name'] + ")'")
+                            print("[WARN] '" + rule['desc'] + "' matched against '" + resource + " (" + prop[
+                                'name'] + ")'")
                             self.rule_evaluations.append({
                                 'result': 'WARN',
                                 'description': rule['desc'],
@@ -501,13 +525,13 @@ class CfnAnalyse(object):
                                 'property': prop['name']
                             })
                         else:
-                            print("[FAIL] '" + rule['desc'] + "' matched against '" + resource + " (" + prop['name'] + ")'")
+                            print("[FAIL] '" + rule['desc'] + "' matched against '" + resource + " (" + prop[
+                                'name'] + ")'")
                             self.rule_evaluations.append({
                                 'result': 'FAIL',
                                 'description': rule['desc'],
                                 'resource': resource,
                                 'property': prop['name']
                             })
-        
-        return self.rule_evaluations
 
+        return self.rule_evaluations
