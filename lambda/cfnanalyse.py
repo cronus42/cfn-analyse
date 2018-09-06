@@ -2,8 +2,8 @@ import base64
 import json
 import os
 import traceback
+import collections
 from pprint import pprint
-
 import ipaddr
 import ruamel.yaml
 
@@ -158,11 +158,18 @@ class CfnAnalyse(object):
 
         # Explanation on this: if resource.propname exists in the specification, it is handled as a distinct resource (e.g. 1.5.0/AWS::AutoScaling::AutoScalingGroup.NotificationConfiguration)
         if resource_type + "." + propname in spec_types:
-            for subpropname, subprop in prop.items():
-                self.processProperty(resource_type + "." + propname, subpropname, subprop)
-            return
+            if isinstance(prop, collections.Mapping):
+                for subpropname, subprop in prop.items():
+                    self.processProperty(resource_type + "." + propname, subpropname, subprop)
+                return
         else:
-            propdef = spec_types[resource_type]['Properties'][propname]
+            try:
+                propdef = spec_types[resource_type]['Properties'][propname]
+            except Exception as e:
+                pprint(e)
+                pprint(prop)
+                return
+
 
         if 'PrimitiveType' in propdef:
             if propdef['PrimitiveType'] == "Json":  # can JSON have sub refs? YES! Yes it can

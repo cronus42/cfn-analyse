@@ -247,7 +247,8 @@ def start_execution(event):
                     for tag in s3tags['TagSet']:
                         if tag['Key'].lower() == "stackname":
                             stack_name = tag['Value']
-                    
+
+                    # TODO: VersionId blows up on keys with whitespace
                     if stack_name == default_stack_name:
                         s3obj = s3client.get_object(
                             Bucket=event['Records'][0]['s3']['bucket']['name'],
