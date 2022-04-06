@@ -1,4 +1,4 @@
-FROM alpine:latest
+FROM alpine:3.15.4
 ENV http_proxy ${http_proxy}
 ENV https_proxy ${https_proxy}
 
